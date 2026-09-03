@@ -12,11 +12,12 @@ INVITE_TTL_HOURS = 24
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS households (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    title           TEXT    NOT NULL,
-    spreadsheet_id  TEXT    NOT NULL,
-    created_by      INTEGER NOT NULL,
-    created_at      TEXT    NOT NULL
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    title             TEXT    NOT NULL,
+    spreadsheet_id    TEXT    NOT NULL,
+    created_by        INTEGER NOT NULL,
+    created_at        TEXT    NOT NULL,
+    period_start_day  INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -52,6 +53,7 @@ class Household:
     title: str
     spreadsheet_id: str
     created_by: int
+    period_start_day: int = 1
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,19 @@ class Registry:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.executescript(SCHEMA)
+        self._migrate()
         self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Догоняет схему у баз, созданных предыдущими версиями."""
+        columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(households)").fetchall()
+        }
+        if "period_start_day" not in columns:
+            self._conn.execute(
+                "ALTER TABLE households ADD COLUMN period_start_day INTEGER NOT NULL DEFAULT 1"
+            )
 
     def close(self) -> None:
         self._conn.close()
@@ -125,7 +139,8 @@ class Registry:
 
     def get_household(self, household_id: int) -> Household | None:
         row = self._conn.execute(
-            "SELECT id, title, spreadsheet_id, created_by FROM households WHERE id = ?",
+            "SELECT id, title, spreadsheet_id, created_by, period_start_day "
+            "FROM households WHERE id = ?",
             (household_id,),
         ).fetchone()
         if row is None:
@@ -135,6 +150,7 @@ class Registry:
             title=row["title"],
             spreadsheet_id=row["spreadsheet_id"],
             created_by=row["created_by"],
+            period_start_day=row["period_start_day"] or 1,
         )
 
     def find_household_by_spreadsheet(self, spreadsheet_id: str) -> Household | None:
@@ -176,6 +192,13 @@ class Registry:
             "UPDATE users SET active_household_id = ? WHERE telegram_id = ?",
             (household_id, user_id),
         )
+
+    def set_period_start_day(self, household_id: int, day: int) -> None:
+        self._conn.execute(
+            "UPDATE households SET period_start_day = ? WHERE id = ?",
+            (max(1, min(day, 28)), household_id),
+        )
+        self._conn.commit()
 
     def members(self, household_id: int) -> list[tuple[int, str, str]]:
         rows = self._conn.execute(

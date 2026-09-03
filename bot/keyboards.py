@@ -14,14 +14,14 @@ from .repository.base import Category
 BUTTON_EXPENSE = "➖ Трата"
 BUTTON_INCOME = "➕ Доход"
 BUTTON_LAST = "📋 Последние"
-BUTTON_REPEAT = "🔁 Повторить"
+BUTTON_REPORT = "📊 Сводка"
 
 
 def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=BUTTON_EXPENSE), KeyboardButton(text=BUTTON_INCOME)],
-            [KeyboardButton(text=BUTTON_LAST), KeyboardButton(text=BUTTON_REPEAT)],
+            [KeyboardButton(text=BUTTON_LAST), KeyboardButton(text=BUTTON_REPORT)],
         ],
         resize_keyboard=True,
         is_persistent=True,

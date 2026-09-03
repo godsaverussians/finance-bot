@@ -326,7 +326,6 @@ async def undo_last(
         await message.answer("Не получилось удалить.")
 
 
-@router.message(F.text == kb.BUTTON_REPEAT)
 @router.message(Command("repeat"))
 async def repeat_last(
     message: Message,
