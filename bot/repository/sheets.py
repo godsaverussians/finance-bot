@@ -246,6 +246,18 @@ class SheetsRepository(Repository):
     async def soft_delete(self, tx_id: str) -> bool:
         return await self._run(self._soft_delete_sync, tx_id)
 
+    def _set_comment_sync(self, tx_id: str, comment: str) -> bool:
+        ws = self._open().worksheet(TRANSACTIONS)
+        cell = ws.find(tx_id, in_column=1)
+        if cell is None:
+            return False
+        comment_col = TRANSACTIONS_HEADER.index("comment") + 1
+        ws.update_cell(cell.row, comment_col, comment)
+        return True
+
+    async def set_comment(self, tx_id: str, comment: str) -> bool:
+        return await self._run(self._set_comment_sync, tx_id, comment)
+
 
 class SheetsFactory:
     """Один клиент gspread на процесс, репозиторий на таблицу."""

@@ -16,6 +16,7 @@ from ..constants import (
     parse_spreadsheet_id,
     spreadsheet_url,
 )
+from ..keyboards import main_menu
 from ..registry import INVITE_TTL_HOURS, Registry, UserContext
 from ..repository.base import EXPENSE, INCOME
 from ..repository.sheets import NoAccessError, SheetsFactory
@@ -53,9 +54,10 @@ async def _finish(message: Message, state: FSMContext, context_household_title: 
     await state.clear()
     await message.answer(
         f"Готово. Учёт «{context_household_title}» подключён.\n\n"
-        "Дальше: /status — что подключено, /categories — список категорий, "
-        "/invite — код для второго участника.\n\n"
-        "Внесение трат появится на следующем шаге разработки."
+        "Записывать траты можно кнопками снизу или просто отправив сумму — "
+        "тогда бот спросит только категорию.\n\n"
+        "/invite — код для второго участника, /status — что подключено.",
+        reply_markup=main_menu(),
     )
 
 
@@ -72,8 +74,9 @@ async def cmd_start(
 
     if user_context and user_context.household:
         await message.answer(
-            f"Ты уже подключён к учёту «{user_context.household.title}».\n"
-            "/status — подробности, /categories — категории."
+            f"Учёт «{user_context.household.title}» на связи. "
+            "Кнопки снизу, или просто отправь сумму.",
+            reply_markup=main_menu(),
         )
         return
 
@@ -90,7 +93,8 @@ async def start_create(
     callback: CallbackQuery, state: FSMContext, config: Config
 ) -> None:
     await callback.answer()
-    assert isinstance(callback.message, Message)
+    if callback.message is None:
+        return
 
     if config.bootstrap_code:
         await state.set_state(Onboarding.bootstrap_code)
@@ -187,7 +191,8 @@ async def use_default_categories(
     factory: SheetsFactory,
 ) -> None:
     await callback.answer()
-    assert isinstance(callback.message, Message)
+    if callback.message is None:
+        return
 
     data = await state.get_data()
     household = registry.get_household(int(data["household_id"]))
@@ -201,7 +206,8 @@ async def use_default_categories(
 @router.callback_query(Onboarding.categories_mode, F.data == "onb:cats:custom")
 async def ask_expense_categories(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    assert isinstance(callback.message, Message)
+    if callback.message is None:
+        return
     await state.set_state(Onboarding.expense_list)
     await callback.message.answer(
         "Перечисли категории трат через запятую одним сообщением.\n\n"
@@ -258,7 +264,8 @@ async def take_income_categories(
 @router.callback_query(F.data == "onb:join")
 async def start_join(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    assert isinstance(callback.message, Message)
+    if callback.message is None:
+        return
     await state.set_state(Onboarding.invite_code)
     await callback.message.answer("Пришли код приглашения (8 символов).")
 
@@ -304,8 +311,8 @@ async def _redeem(
     await state.clear()
     await message.answer(
         f"Готово, ты подключён к учёту «{result.title}».\n\n"
-        "Категории уже настроены владельцем. "
-        "Если хочешь смотреть данные глазами — попроси у него ссылку на таблицу."
+        "Категории уже настроены владельцем. Записывать можно кнопками снизу.",
+        reply_markup=main_menu(),
     )
 
 

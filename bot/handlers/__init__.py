@@ -1,5 +1,6 @@
-from . import onboarding
+from . import entry, onboarding
 
-routers = (onboarding.router,)
+# Порядок важен: онбординг перехватывает свои состояния раньше общего ввода.
+routers = (onboarding.router, entry.router)
 
 __all__ = ["routers"]

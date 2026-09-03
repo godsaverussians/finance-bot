@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 COMMANDS = [
     BotCommand(command="start", description="Начало и подключение учёта"),
+    BotCommand(command="add", description="Записать трату"),
+    BotCommand(command="income", description="Записать доход"),
+    BotCommand(command="last", description="Последние операции"),
+    BotCommand(command="undo", description="Удалить последнюю"),
+    BotCommand(command="repeat", description="Повторить последнюю"),
     BotCommand(command="status", description="Что подключено"),
     BotCommand(command="categories", description="Список категорий"),
     BotCommand(command="invite", description="Код для второго участника"),

@@ -79,3 +79,6 @@ class Repository(ABC):
 
     @abstractmethod
     async def soft_delete(self, tx_id: str) -> bool: ...
+
+    @abstractmethod
+    async def set_comment(self, tx_id: str, comment: str) -> bool: ...
