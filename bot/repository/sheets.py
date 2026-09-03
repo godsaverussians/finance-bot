@@ -29,7 +29,7 @@ TRANSACTIONS_HEADER = [
     "source",
     "deleted",
 ]
-CATEGORIES_HEADER = ["name", "type", "emoji", "order", "active"]
+CATEGORIES_HEADER = ["name", "type", "emoji", "order", "active", "manual"]
 RECURRING_HEADER = [
     "id",
     "name",
@@ -131,10 +131,11 @@ class SheetsRepository(Repository):
     def _set_categories_sync(self, categories: Sequence[Category]) -> None:
         ws = self._open().worksheet(CATEGORIES)
         rows = [
-            [c.name, c.type, c.emoji, c.order, c.active]
+            [c.name, c.type, c.emoji, c.order, c.active, c.manual]
             for c in categories
         ]
-        ws.batch_clear([f"A2:E{max(ws.row_count, len(rows) + 1)}"])
+        last_column = chr(ord("A") + len(CATEGORIES_HEADER) - 1)
+        ws.batch_clear([f"A2:{last_column}{max(ws.row_count, len(rows) + 1)}"])
         if rows:
             ws.update(rows, "A2", value_input_option="USER_ENTERED")
 
@@ -161,18 +162,27 @@ class SheetsRepository(Repository):
                     emoji=padded[2].strip(),
                     order=order,
                     active=_is_true(padded[4]) if padded[4] != "" else True,
+                    manual=_is_true(padded[5]) if padded[5] != "" else True,
                 )
             )
         result.sort(key=lambda c: (c.order, c.name))
         return result
 
-    async def get_categories(self, type_: str | None = None) -> list[Category]:
+    async def get_categories(
+        self, type_: str | None = None, manual_only: bool = False
+    ) -> list[Category]:
         now = time.monotonic()
         if self._categories_cache is None or now - self._categories_cache[0] > _CATEGORY_CACHE_TTL:
             fresh = await self._run(self._get_categories_sync)
             self._categories_cache = (now, fresh)
         cached = self._categories_cache[1]
-        return [c for c in cached if c.active and (type_ is None or c.type == type_)]
+        return [
+            c
+            for c in cached
+            if c.active
+            and (type_ is None or c.type == type_)
+            and (not manual_only or c.manual)
+        ]
 
     def invalidate_cache(self) -> None:
         self._categories_cache = None

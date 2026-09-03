@@ -378,10 +378,21 @@ async def cmd_categories(message: Message, user_context: UserContext | None, rep
         await message.answer("Категорий нет. Добавь их прямо в лист categories в таблице.")
         return
 
-    expenses = [c.label for c in categories if c.type == EXPENSE]
-    incomes = [c.label for c in categories if c.type == INCOME]
-    lines = ["*Траты*", ", ".join(expenses) or "—", "", "*Доходы*", ", ".join(incomes) or "—"]
-    lines += ["", "Правятся в листе `categories` в таблице, бот подхватит после /categories."]
+    def render(type_: str) -> str:
+        visible = [c.label for c in categories if c.type == type_ and c.manual]
+        hidden = [c.label for c in categories if c.type == type_ and not c.manual]
+        text = ", ".join(visible) or "—"
+        if hidden:
+            text += "\n_только для постоянных:_ " + ", ".join(hidden)
+        return text
+
+    lines = ["*Траты*", render(EXPENSE), "", "*Доходы*", render(INCOME)]
+    lines += [
+        "",
+        "Правятся в листе `categories`, бот перечитает после /categories.",
+        "Колонка `manual` = FALSE убирает категорию с кнопок ручного ввода, "
+        "оставляя её для постоянных операций.",
+    ]
     await message.answer("\n".join(lines), parse_mode="Markdown")
 
 

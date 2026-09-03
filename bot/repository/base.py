@@ -17,6 +17,9 @@ class Category:
     emoji: str = ""
     order: int = 0
     active: bool = True
+    # False — категория не показывается на кнопках ручного ввода,
+    # но остаётся доступной для постоянных операций.
+    manual: bool = True
 
     @property
     def label(self) -> str:
@@ -107,7 +110,9 @@ class Repository(ABC):
     async def set_categories(self, categories: Sequence[Category]) -> None: ...
 
     @abstractmethod
-    async def get_categories(self, type_: str | None = None) -> list[Category]: ...
+    async def get_categories(
+        self, type_: str | None = None, manual_only: bool = False
+    ) -> list[Category]: ...
 
     @abstractmethod
     async def add_transaction(self, tx: Transaction) -> str: ...

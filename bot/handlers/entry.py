@@ -55,7 +55,7 @@ async def _start_entry(
     repo: Repository,
     type_: str,
 ) -> None:
-    items = await repo.get_categories(type_)
+    items = await repo.get_categories(type_, manual_only=True)
     if not items:
         await message.answer(
             f"Нет категорий для «{TYPE_LABELS[type_].lower()}». "
@@ -217,7 +217,7 @@ async def quick_amount(
     if amount is None:
         return
 
-    items = await repo.get_categories(EXPENSE)
+    items = await repo.get_categories(EXPENSE, manual_only=True)
     if not items:
         return
 

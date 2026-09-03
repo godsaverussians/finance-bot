@@ -181,7 +181,7 @@ async def pick_type(callback: CallbackQuery, state: FSMContext, repo: Repository
         return
 
     type_ = callback.data.rsplit(":", 1)[1]
-    items = await repo.get_categories(type_)
+    items = await repo.get_categories(type_)  # тут показываем все, включая скрытые
     if not items:
         await callback.message.edit_text("Нет подходящих категорий.")
         await state.clear()
