@@ -12,6 +12,7 @@ from .handlers import routers
 from .middleware import ContextMiddleware
 from .registry import Registry
 from .repository.sheets import SheetsFactory
+from .scheduler import RecurringPoster
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ COMMANDS = [
     BotCommand(command="last", description="Последние операции"),
     BotCommand(command="undo", description="Удалить последнюю"),
     BotCommand(command="repeat", description="Повторить последнюю"),
+    BotCommand(command="recurring", description="Постоянные операции"),
     BotCommand(command="status", description="Что подключено"),
     BotCommand(command="categories", description="Список категорий"),
     BotCommand(command="invite", description="Код для второго участника"),
@@ -51,6 +53,19 @@ def _build_factory(config: Config) -> SheetsFactory | None:
     return factory
 
 
+async def ensure_structures(registry: Registry, factory: SheetsFactory) -> None:
+    """Догоняет структуру листов у уже подключённых таблиц.
+
+    Нужно, когда в новой версии появились колонки: при онбординге листы
+    создались по старой схеме и сами не обновятся.
+    """
+    for household in registry.all_households():
+        try:
+            await factory.repository(household.spreadsheet_id).ensure_structure()
+        except Exception:
+            logger.warning("Не обновил структуру листов: %s", household.title)
+
+
 async def run() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -76,12 +91,20 @@ async def run() -> None:
     for router in routers:
         dispatcher.include_router(router)
 
+    scheduler_task = None
+    if factory is not None:
+        await ensure_structures(registry, factory)
+        poster = RecurringPoster(bot, config, registry, factory)
+        scheduler_task = asyncio.create_task(poster.run_forever())
+
     try:
         await bot.set_my_commands(COMMANDS)
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("Запускаю polling")
         await dispatcher.start_polling(bot)
     finally:
+        if scheduler_task is not None:
+            scheduler_task.cancel()
         registry.close()
         await bot.session.close()
 

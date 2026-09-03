@@ -1,6 +1,6 @@
-from . import entry, onboarding
+from . import entry, onboarding, recurring
 
-# Порядок важен: онбординг перехватывает свои состояния раньше общего ввода.
-routers = (onboarding.router, entry.router)
+# Порядок важен: свои состояния перехватываются раньше общего быстрого ввода.
+routers = (onboarding.router, recurring.router, entry.router)
 
 __all__ = ["routers"]

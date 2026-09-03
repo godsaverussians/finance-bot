@@ -10,7 +10,7 @@ from typing import Sequence
 import gspread
 from gspread.exceptions import APIError, SpreadsheetNotFound, WorksheetNotFound
 
-from .base import Category, Repository, Transaction
+from .base import INTERVAL, MONTHLY, Category, RecurringRule, Repository, Transaction
 
 TRANSACTIONS = "transactions"
 CATEGORIES = "categories"
@@ -40,6 +40,11 @@ RECURRING_HEADER = [
     "user_id",
     "active",
     "last_posted_month",
+    # Добавлять новые поля только в конец — иначе съедут уже записанные строки.
+    "schedule_kind",
+    "interval_days",
+    "start_date",
+    "last_posted_date",
 ]
 
 _CATEGORY_CACHE_TTL = 300
@@ -47,6 +52,18 @@ _CATEGORY_CACHE_TTL = 300
 
 def _is_true(value) -> bool:
     return str(value).strip().upper() in {"TRUE", "1", "ДА", "YES"}
+
+
+def _parse_date(value) -> date | None:
+    raw = str(value).strip()
+    if not raw:
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _to_kopecks(value) -> int:
@@ -89,6 +106,10 @@ class SheetsRepository(Repository):
         ):
             if name in existing:
                 ws = existing[name]
+                # Лист мог быть создан с меньшим числом колонок — иначе запись
+                # нового заголовка упрётся в границы сетки.
+                if ws.col_count < len(header):
+                    ws.resize(cols=len(header))
                 if ws.row_values(1) != header:
                     ws.update([header], "A1")
             else:
@@ -257,6 +278,112 @@ class SheetsRepository(Repository):
 
     async def set_comment(self, tx_id: str, comment: str) -> bool:
         return await self._run(self._set_comment_sync, tx_id, comment)
+
+    # --- постоянные операции -----------------------------------------
+
+    def _list_recurring_sync(self) -> list[RecurringRule]:
+        ws = self._open().worksheet(RECURRING)
+        out: list[RecurringRule] = []
+        for row in ws.get_all_values()[1:]:
+            padded = row + [""] * (len(RECURRING_HEADER) - len(row))
+            if not padded[0].strip():
+                continue
+            try:
+                day = int(float(padded[5] or 1))
+            except ValueError:
+                day = 1
+            try:
+                interval = int(float(padded[10] or 0))
+            except ValueError:
+                interval = 0
+            kind = padded[9].strip().lower() or MONTHLY
+            if kind not in (MONTHLY, INTERVAL):
+                kind = MONTHLY
+
+            out.append(
+                RecurringRule(
+                    id=padded[0].strip(),
+                    name=padded[1].strip(),
+                    type=padded[2].strip() or "expense",
+                    amount=_to_kopecks(padded[3]),
+                    category=padded[4].strip(),
+                    day_of_month=min(max(day, 1), 31),
+                    user_id=int(padded[6] or 0),
+                    active=_is_true(padded[7]) if padded[7] != "" else True,
+                    last_posted_month=padded[8].strip(),
+                    schedule_kind=kind,
+                    interval_days=max(interval, 0),
+                    start_date=_parse_date(padded[11]),
+                    last_posted_date=_parse_date(padded[12]),
+                )
+            )
+        return out
+
+    async def list_recurring(self) -> list[RecurringRule]:
+        return await self._run(self._list_recurring_sync)
+
+    def _add_recurring_sync(self, rule: RecurringRule) -> str:
+        ws = self._open().worksheet(RECURRING)
+        ws.append_row(
+            [
+                rule.id,
+                rule.name,
+                rule.type,
+                round(rule.amount / 100, 2),
+                rule.category,
+                rule.day_of_month,
+                rule.user_id,
+                rule.active,
+                rule.last_posted_month,
+                rule.schedule_kind,
+                rule.interval_days,
+                rule.start_date.isoformat() if rule.start_date else "",
+                rule.last_posted_date.isoformat() if rule.last_posted_date else "",
+            ],
+            value_input_option="USER_ENTERED",
+        )
+        return rule.id
+
+    async def add_recurring(self, rule: RecurringRule) -> str:
+        return await self._run(self._add_recurring_sync, rule)
+
+    def _update_recurring_sync(
+        self,
+        rule_id: str,
+        active: bool | None,
+        last_posted_month: str | None,
+        last_posted_date: date | None,
+    ) -> bool:
+        ws = self._open().worksheet(RECURRING)
+        cell = ws.find(rule_id, in_column=1)
+        if cell is None:
+            return False
+
+        updates = {
+            "active": active,
+            "last_posted_month": last_posted_month,
+            "last_posted_date": last_posted_date.isoformat() if last_posted_date else None,
+        }
+        for column, value in updates.items():
+            if value is not None:
+                ws.update_cell(cell.row, RECURRING_HEADER.index(column) + 1, value)
+        return True
+
+    async def update_recurring(
+        self,
+        rule_id: str,
+        *,
+        active: bool | None = None,
+        last_posted_month: str | None = None,
+        last_posted_date: date | None = None,
+    ) -> bool:
+        return await self._run(
+            self._update_recurring_sync,
+            rule_id,
+            active,
+            last_posted_month,
+            last_posted_date,
+        )
 
 
 class SheetsFactory:

@@ -143,6 +143,10 @@ class Registry:
         ).fetchone()
         return self.get_household(row["id"]) if row else None
 
+    def all_households(self) -> list[Household]:
+        rows = self._conn.execute("SELECT id FROM households ORDER BY id").fetchall()
+        return [h for h in (self.get_household(r["id"]) for r in rows) if h]
+
     def create_household(
         self, title: str, spreadsheet_id: str, owner_id: int
     ) -> Household:
